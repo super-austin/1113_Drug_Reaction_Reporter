@@ -1,13 +1,23 @@
 import React, { useState, type FC, FormEvent } from "react";
 
 import SearchBar from "./components/SearchBar";
+import ReactionsList from "./components/ReactionsList";
+
+import type { Reaction } from "./common.types";
+
+import { MOCK_REACTIONS_LIST } from "./mock";
 
 const App: FC = () => {
   const [drugName, setDrugName] = useState<string>("");
+  const [reactions, setReactions] = useState<Reaction[]>([]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log(drugName);
+    if (MOCK_REACTIONS_LIST[drugName]) {
+      setReactions(MOCK_REACTIONS_LIST[drugName]);
+    } else {
+      setReactions([]);
+    }
   };
 
   return (
@@ -21,6 +31,7 @@ const App: FC = () => {
           setDrugName={setDrugName}
           onSubmit={handleSubmit}
         />
+        <ReactionsList reactions={reactions} drugName={drugName} />
       </div>
     </div>
   );
