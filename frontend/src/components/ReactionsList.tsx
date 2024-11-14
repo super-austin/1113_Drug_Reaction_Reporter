@@ -14,7 +14,6 @@ const ReactionsList: FC<ReactionsListProps> = ({ reactions, drugName }) => {
         Adverse Reactions for {drugName}
       </h2>
       <div className="space-y-2">
-        {!reactions.length && <span>No List</span>}
         {reactions.map((reaction, index) => (
           <div
             key={index}
