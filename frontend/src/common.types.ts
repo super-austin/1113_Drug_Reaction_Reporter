@@ -5,5 +5,10 @@ export interface Reaction {
 
 export interface ApiResponse {
   reactions: Reaction[];
-  totalResults: number;
+  meta: {
+    disclaimer: string;
+    lastUpdated: string;
+    total: number;
+  };
+  nextPageUrl: string | null;
 }
