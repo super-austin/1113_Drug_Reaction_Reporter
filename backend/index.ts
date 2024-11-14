@@ -38,7 +38,6 @@ app.get("/api/drug-reactions", async (req: Request, res: Response) => {
 
     return res.status(200).json(apiResponse);
   } catch (error) {
-    console.error(error);
     return res.status(500).json({ msg: "Server error!" });
   }
 });

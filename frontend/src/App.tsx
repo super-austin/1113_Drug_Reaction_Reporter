@@ -1,22 +1,43 @@
 import React, { useState, type FC, FormEvent } from "react";
+import axios from "axios";
 
 import SearchBar from "./components/SearchBar";
 import ReactionsList from "./components/ReactionsList";
 
-import type { Reaction } from "./common.types";
+import type { Reaction, ApiResponse } from "./common.types";
 
-import { MOCK_REACTIONS_LIST } from "./mock";
+const apiBaseUrl =
+  process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const App: FC = () => {
   const [drugName, setDrugName] = useState<string>("");
   const [reactions, setReactions] = useState<Reaction[]>([]);
 
+  const fetchReactions = async () => {
+    setReactions([]);
+    try {
+      const { data } = await axios.get<ApiResponse>(
+        `${apiBaseUrl}/api/drug-reactions`,
+        {
+          params: {
+            drugName,
+          },
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      setReactions(data.reactions);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (MOCK_REACTIONS_LIST[drugName]) {
-      setReactions(MOCK_REACTIONS_LIST[drugName]);
-    } else {
-      setReactions([]);
+    if (drugName.trim()) {
+      await fetchReactions();
     }
   };
 
