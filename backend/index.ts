@@ -38,7 +38,23 @@ app.get("/api/drug-reactions", async (req: Request, res: Response) => {
 
     return res.status(200).json(apiResponse);
   } catch (error) {
-    return res.status(500).json({ msg: "Server error!" });
+    if (axios.isAxiosError(error)) {
+      const statusCode = error.response?.status || 500;
+      const errorMessage =
+        error.response?.data?.error?.message ||
+        error.response?.data?.error ||
+        "Error fetching drug reactions";
+
+      res.status(statusCode).json({
+        error: errorMessage,
+        details: error.message,
+      });
+    } else {
+      res.status(500).json({
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 });
 

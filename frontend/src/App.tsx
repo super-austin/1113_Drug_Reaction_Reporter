@@ -1,8 +1,10 @@
 import React, { useState, type FC, FormEvent } from "react";
-import axios from "axios";
+import axios, { type AxiosError } from "axios";
 
 import SearchBar from "./components/SearchBar";
 import ReactionsList from "./components/ReactionsList";
+import Loading from "./components/Loading";
+import ErrorNotification from "./components/ErrorNotification";
 
 import type { Reaction, ApiResponse } from "./common.types";
 
@@ -12,10 +14,15 @@ const apiBaseUrl =
 const App: FC = () => {
   const [drugName, setDrugName] = useState<string>("");
   const [reactions, setReactions] = useState<Reaction[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchReactions = async () => {
     setReactions([]);
     try {
+      setLoading(true);
+      setError(null);
+
       const { data } = await axios.get<ApiResponse>(
         `${apiBaseUrl}/api/drug-reactions`,
         {
@@ -30,7 +37,18 @@ const App: FC = () => {
 
       setReactions(data.reactions);
     } catch (err) {
-      console.error(err);
+      if (axios.isAxiosError(err)) {
+        const error = err as AxiosError<{ error: string; details?: string }>;
+        setError(
+          error.response?.data?.error ||
+            error.message ||
+            "An error occurred while fetching the data"
+        );
+      } else {
+        setError("An unexpected error occurred");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,6 +70,8 @@ const App: FC = () => {
           setDrugName={setDrugName}
           onSubmit={handleSubmit}
         />
+        {loading && <Loading />}
+        {error && <ErrorNotification error={error} />}
         <ReactionsList reactions={reactions} drugName={drugName} />
       </div>
     </div>
