@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import axios, { AxiosError } from "axios";
+import React, { useState, useMemo, type FC, FormEvent } from "react";
+import axios, { type AxiosError } from "axios";
 
 import SearchBar from "./components/SearchBar";
 import ReactionsList from "./components/ReactionsList";
@@ -7,26 +7,47 @@ import Loading from "./components/Loading";
 import ErrorNotification from "./components/ErrorNotification";
 import Pagination from "./components/Pagination";
 
-import { Reaction, ApiResponse } from "./common.types";
+import type { Reaction, ApiResponse } from "./common.types";
 
 const apiBaseUrl =
   process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const itemsPerPage = Number(process.env.REACT_APP_ITEMS_PER_PAGE) || 5;
 
-const App: React.FC = () => {
+const App: FC = () => {
   const [drugName, setDrugName] = useState<string>("");
-  const [reactions, setReactions] = useState<Reaction[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [nextPageUrl, setNextPageUrl] = useState<string | null>(null);
-  // Store an array of searchAfter values for each page
-  const [searchAfterHistory, setSearchAfterHistory] = useState<
-    (string | null)[]
-  >([null]);
 
-  const fetchReactions = async (page: number, isNextPage: boolean) => {
+  const [pagesCache, setPagesCache] = useState<
+    Map<
+      number,
+      {
+        reactions: Reaction[];
+        nextPageUrl: string | null;
+      }
+    >
+  >(new Map());
+
+  const reactions = useMemo(() => {
+    return pagesCache.get(currentPage)?.reactions || [];
+  }, [pagesCache, currentPage]);
+
+  const nextPageUrl = useMemo(() => {
+    return pagesCache.get(currentPage)?.nextPageUrl || null;
+  }, [pagesCache, currentPage]);
+
+  const fetchReactions = async (
+    page: number,
+    isNextPage: boolean,
+    cache: Map<number, any>
+  ) => {
+    if (cache.has(page)) {
+      setCurrentPage(page);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -36,15 +57,14 @@ const App: React.FC = () => {
         limit: itemsPerPage,
       };
 
-      // If going forward, use the last searchAfter value
-      // If going backward, use the second-to-last searchAfter value
-      if (page > 1) {
-        const searchAfter = isNextPage
-          ? searchAfterHistory[searchAfterHistory.length - 1]
-          : searchAfterHistory[searchAfterHistory.length - 3];
-
-        if (searchAfter) {
-          params.search_after = searchAfter;
+      if (page > 1 && isNextPage) {
+        const prevPageInfo = cache.get(page - 1);
+        if (prevPageInfo?.nextPageUrl) {
+          const url = new URL(prevPageInfo.nextPageUrl);
+          const searchAfter = url.searchParams.get("search_after");
+          if (searchAfter) {
+            params.search_after = searchAfter;
+          }
         }
       }
 
@@ -58,25 +78,32 @@ const App: React.FC = () => {
         }
       );
 
-      setReactions(data.reactions);
-      setTotalResults(data.meta.total);
-      setNextPageUrl(data.nextPageUrl);
+      const { reactions, nextPageUrl, meta } = data;
 
-      // Handle searchAfter history
-      if (data.nextPageUrl) {
-        const url = new URL(data.nextPageUrl);
-        const newSearchAfter = url.searchParams.get("search_after");
-
-        if (isNextPage && newSearchAfter) {
-          // Add new searchAfter value to history when going forward
-          setSearchAfterHistory((prev) => [...prev, newSearchAfter]);
-        } else if (!isNextPage) {
-          // Remove the last searchAfter value when going backward
-          setSearchAfterHistory((prev) => prev.slice(0, -1));
-        }
+      if (reactions.length === 0 && page === 1) {
+        setError("No match found");
+        setTotalResults(0);
+        setPagesCache(new Map());
+        return;
       }
+
+      setPagesCache((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(page, {
+          reactions,
+          nextPageUrl,
+        });
+        return newMap;
+      });
+
+      setTotalResults(meta.total);
     } catch (err) {
-      setReactions([]);
+      setPagesCache((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(page);
+        return newMap;
+      });
+
       if (axios.isAxiosError(err)) {
         const error = err as AxiosError<{ error: string; details?: string }>;
         setError(
@@ -92,12 +119,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (drugName.trim()) {
       setCurrentPage(1);
-      setSearchAfterHistory([null]);
-      await fetchReactions(1, true);
+      const newCache = new Map();
+      setPagesCache(newCache);
+      setError(null);
+      await fetchReactions(1, true, newCache);
     }
   };
 
@@ -106,8 +135,14 @@ const App: React.FC = () => {
     if (page > currentPage && !nextPageUrl) return;
 
     const isNextPage = page > currentPage;
+
+    if (pagesCache.has(page)) {
+      setCurrentPage(page);
+      return;
+    }
+
+    await fetchReactions(page, isNextPage, pagesCache);
     setCurrentPage(page);
-    await fetchReactions(page, isNextPage);
   };
 
   return (
@@ -123,7 +158,7 @@ const App: React.FC = () => {
         />
         {loading && <Loading />}
         {error && <ErrorNotification error={error} />}
-        {reactions.length > 0 && (
+        {!loading && !error && reactions.length > 0 && (
           <>
             <div className="text-sm text-gray-600 mt-4 mb-2">
               Total reports found: {totalResults}
